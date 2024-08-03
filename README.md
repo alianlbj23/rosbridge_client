@@ -1,4 +1,9 @@
 # rosbridge_client
+## 安裝
+```
+pip install roslibpy
+```
+
 接收 jetson 上面的 /out/compressed ， 然後透過這個 rosbridge client 端轉發到本地端
 
 有兩個參數，分別是
