@@ -12,9 +12,9 @@ pip install roslibpy
   
 使用範例 :
 ```
-python your_script.py --rosbridge_ip 192.168.0.207 --rosbridge_port 9090
+python3 rosbridge_client.py --rosbridge_ip 192.168.0.207 --rosbridge_port 9090
 ```
 or 
 ```
-python your_script.py --rosbridge_ip 192.168.0.207
+python3 rosbridge_client.py --rosbridge_ip 192.168.0.207
 ```
