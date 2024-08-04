@@ -1,7 +1,7 @@
 import roslibpy
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import CompressedImage, Image
 from std_msgs.msg import Header
 import base64
 import numpy as np
@@ -10,15 +10,19 @@ import argparse
 class RosbridgeSubscriber(Node):
     def __init__(self, rosbridge_ip, rosbridge_port):
         super().__init__('rosbridge_subscriber')
-        self.publisher_ = self.create_publisher(CompressedImage, '/out/compressed', 10)
+        self.publisher_compressed = self.create_publisher(CompressedImage, '/out/compressed', 10)
+        self.publisher_depth = self.create_publisher(Image, '/camera/depth/image_raw', 10)
 
         self.client = roslibpy.Ros(host=rosbridge_ip, port=rosbridge_port)
         self.client.run()
 
-        self.listener = roslibpy.Topic(self.client, '/out/compressed', 'sensor_msgs/CompressedImage')
-        self.listener.subscribe(self.callback)
+        self.listener_compressed = roslibpy.Topic(self.client, '/out/compressed', 'sensor_msgs/CompressedImage')
+        self.listener_compressed.subscribe(self.callback_compressed)
 
-    def callback(self, message):
+        self.listener_depth = roslibpy.Topic(self.client, '/camera/depth/image_raw', 'sensor_msgs/Image')
+        self.listener_depth.subscribe(self.callback_depth)
+
+    def callback_compressed(self, message):
         # Convert roslibpy message to ROS 2 message
         ros_msg = CompressedImage()
         ros_msg.header = Header()
@@ -31,10 +35,31 @@ class RosbridgeSubscriber(Node):
             data = base64.b64decode(data)
 
         ros_msg.data = np.frombuffer(data, dtype=np.uint8).tobytes()
-        self.publisher_.publish(ros_msg)
+        self.publisher_compressed.publish(ros_msg)
+
+    def callback_depth(self, message):
+        # Convert roslibpy message to ROS 2 message
+        ros_msg = Image()
+        ros_msg.header = Header()
+        ros_msg.header.stamp = self.get_clock().now().to_msg()
+        ros_msg.header.frame_id = message['header']['frame_id']
+        ros_msg.height = message['height']
+        ros_msg.width = message['width']
+        ros_msg.encoding = message['encoding']
+        ros_msg.is_bigendian = message['is_bigendian']
+        ros_msg.step = message['step']
+
+        # Decode base64-encoded string if necessary
+        data = message['data']
+        if isinstance(data, str):
+            data = base64.b64decode(data)
+
+        ros_msg.data = np.frombuffer(data, dtype=np.uint8).tobytes()
+        self.publisher_depth.publish(ros_msg)
 
     def destroy_node(self):
-        self.listener.unsubscribe()
+        self.listener_compressed.unsubscribe()
+        self.listener_depth.unsubscribe()
         self.client.terminate()
         super().destroy_node()
 
