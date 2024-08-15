@@ -2,25 +2,52 @@ import roslibpy
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage, Imu
-from std_msgs.msg import Header
+from std_msgs.msg import Header, String  # 导入 String 消息类型
 import base64
 import argparse
 import numpy as np
+import time
 
 class RosbridgeSubscriber(Node):
     def __init__(self, rosbridge_ip, rosbridge_port):
         super().__init__('rosbridge_subscriber')
+        self.rosbridge_ip = rosbridge_ip
+        self.rosbridge_port = rosbridge_port
 
-        # Publishers for compressed topics and IMU
+        # Publishers for compressed topics, IMU, and String
         self.publisher_depth_compressed = self.create_publisher(CompressedImage, '/camera/depth/image_raw/compressed', 10)
         self.publisher_color_compressed = self.create_publisher(CompressedImage, '/camera/color/image_raw/compressed', 10)
         self.publisher_imu = self.create_publisher(Imu, '/imu/data_raw', 10)
+        self.publisher_tag_name = self.create_publisher(String, '/tag_name', 10)  # 新增 String 格式的话题发布者
 
-        # Roslibpy client
-        self.client = roslibpy.Ros(host=rosbridge_ip, port=rosbridge_port)
+        # Initial connection attempt
+        self.connect_to_rosbridge()
+
+    def connect_to_rosbridge(self):
+        self.get_logger().info(f'Connecting to rosbridge at {self.rosbridge_ip}:{self.rosbridge_port}...')
+        self.client = roslibpy.Ros(host=self.rosbridge_ip, port=self.rosbridge_port)
+
+        def on_connected():
+            self.get_logger().info('Connect success')
+            self.start_subscribers()
+
+        def on_disconnected(proto=None):
+            self.get_logger().warn('Disconnected from rosbridge server. Attempting to reconnect...')
+            self.retry_connection()
+
+        self.client.on_ready(on_connected, run_in_thread=True)
+        self.client.on('close', on_disconnected)  # Use 'close' event for disconnect
+
         self.client.run()
 
-        # Subscribers for compressed1 topics and IMU data
+    def retry_connection(self):
+        self.client.terminate()  # Ensure the previous client is terminated
+        time.sleep(5)  # Wait before trying to reconnect
+        self.get_logger().info('Reconnect')
+        self.connect_to_rosbridge()
+
+    def start_subscribers(self):
+        # Subscribers for compressed topics, IMU data, and String
         self.listener_depth_compressed = roslibpy.Topic(self.client, '/camera/depth/image_raw/compressed1', 'sensor_msgs/CompressedImage')
         self.listener_depth_compressed.subscribe(self.callback_depth_compressed)
 
@@ -29,6 +56,9 @@ class RosbridgeSubscriber(Node):
 
         self.listener_imu = roslibpy.Topic(self.client, '/imu/data_raw', 'sensor_msgs/Imu')
         self.listener_imu.subscribe(self.callback_imu)
+
+        self.listener_tag_name = roslibpy.Topic(self.client, '/tag_name', 'std_msgs/String')  # 新增 String 格式的订阅者
+        self.listener_tag_name.subscribe(self.callback_tag_name)
 
     def callback_depth_compressed(self, message):
         # Convert roslibpy message to ROS 2 message for compressed depth image
@@ -82,11 +112,19 @@ class RosbridgeSubscriber(Node):
 
         self.publisher_imu.publish(ros_msg)
 
+    def callback_tag_name(self, message):
+        # Convert roslibpy message to ROS 2 message for String
+        ros_msg = String()
+        ros_msg.data = message['data']
+        self.publisher_tag_name.publish(ros_msg)
+
     def destroy_node(self):
-        self.listener_depth_compressed.unsubscribe()
-        self.listener_color_compressed.unsubscribe()
-        self.listener_imu.unsubscribe()
-        self.client.terminate()
+        if self.client.is_connected:
+            self.listener_depth_compressed.unsubscribe()
+            self.listener_color_compressed.unsubscribe()
+            self.listener_imu.unsubscribe()
+            self.listener_tag_name.unsubscribe()  # 取消 String 格式订阅
+            self.client.terminate()
         super().destroy_node()
 
 def main(args=None):
