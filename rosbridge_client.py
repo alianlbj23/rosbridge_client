@@ -2,7 +2,6 @@ import roslibpy
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage, Imu
-from nav_msgs.msg import Path  # 导入 Path 消息类型
 from std_msgs.msg import Header, String
 import base64
 import argparse
@@ -16,12 +15,10 @@ class RosbridgeSubscriber(Node):
         self.rosbridge_ip = rosbridge_ip
         self.rosbridge_port = rosbridge_port
 
-        # Publishers for compressed topics, IMU, String, and Path
         self.publisher_depth_compressed = self.create_publisher(CompressedImage, '/camera/depth/image_raw/compressed', 10)
         self.publisher_color_compressed = self.create_publisher(CompressedImage, '/camera/color/image_raw/compressed', 10)
         self.publisher_imu = self.create_publisher(Imu, '/imu/data_raw', 10)
         self.publisher_tag_name = self.create_publisher(String, '/tag_name', 10)
-        self.publisher_plan = self.create_publisher(Path, '/plan', 10)  # 新增 Path 格式的话题发布者
 
         # Initial connection attempt
         self.connect_to_rosbridge()
@@ -50,7 +47,6 @@ class RosbridgeSubscriber(Node):
         self.connect_to_rosbridge()
 
     def start_subscribers(self):
-        # Subscribers for compressed topics, IMU data, String, and Path
         self.listener_depth_compressed = roslibpy.Topic(self.client, '/camera/depth/image_raw/compressed1', 'sensor_msgs/CompressedImage')
         self.listener_depth_compressed.subscribe(self.callback_depth_compressed)
 
@@ -62,9 +58,6 @@ class RosbridgeSubscriber(Node):
 
         self.listener_tag_name = roslibpy.Topic(self.client, '/tag_name', 'std_msgs/String')
         self.listener_tag_name.subscribe(self.callback_tag_name)
-
-        self.listener_plan = roslibpy.Topic(self.client, '/plan', 'nav_msgs/Path')  # 新增 Path 格式的订阅者
-        self.listener_plan.subscribe(self.callback_plan)
 
     def callback_depth_compressed(self, message):
         # Convert roslibpy message to ROS 2 message for compressed depth image
@@ -124,40 +117,12 @@ class RosbridgeSubscriber(Node):
         ros_msg.data = message['data']
         self.publisher_tag_name.publish(ros_msg)
 
-    def callback_plan(self, message):
-        # Convert roslibpy message to ROS 2 message for Path
-        ros_msg = Path()
-        ros_msg.header = Header()
-        ros_msg.header.stamp = self.get_clock().now().to_msg()
-        ros_msg.header.frame_id = message['header']['frame_id']
-
-        ros_msg.poses = []
-        for pose in message['poses']:
-            ros_pose = PoseStamped()
-            ros_pose.header = Header()
-            ros_pose.header.stamp = self.get_clock().now().to_msg()
-            ros_pose.header.frame_id = pose['header']['frame_id']
-
-            ros_pose.pose.position.x = pose['pose']['position']['x']
-            ros_pose.pose.position.y = pose['pose']['position']['y']
-            ros_pose.pose.position.z = pose['pose']['position']['z']
-
-            ros_pose.pose.orientation.x = pose['pose']['orientation']['x']
-            ros_pose.pose.orientation.y = pose['pose']['orientation']['y']
-            ros_pose.pose.orientation.z = pose['pose']['orientation']['z']
-            ros_pose.pose.orientation.w = pose['pose']['orientation']['w']
-
-            ros_msg.poses.append(ros_pose)
-
-        self.publisher_plan.publish(ros_msg)
-
     def destroy_node(self):
         if self.client.is_connected:
             self.listener_depth_compressed.unsubscribe()
             self.listener_color_compressed.unsubscribe()
             self.listener_imu.unsubscribe()
             self.listener_tag_name.unsubscribe()
-            self.listener_plan.unsubscribe()  # 取消 Path 格式订阅
             self.client.terminate()
         super().destroy_node()
 
