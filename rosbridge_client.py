@@ -130,13 +130,13 @@ def main(args=None):
     rclpy.init(args=args)
 
     parser = argparse.ArgumentParser(description='ROS 2 to ROS Bridge Subscriber')
-    parser.add_argument('--rosbridge_ip', type=str, required=True, help='IP address of the rosbridge server')
-    parser.add_argument('--rosbridge_port', type=int, default=9090, help='Port of the rosbridge server')
+    parser.add_argument('--ip', type=str, required=True, help='IP address of the rosbridge server')
+    parser.add_argument('--port', type=int, default=9090, help='Port of the rosbridge server')
 
     args = parser.parse_args()
 
-    rosbridge_ip = args.rosbridge_ip
-    rosbridge_port = args.rosbridge_port
+    rosbridge_ip = args.ip
+    rosbridge_port = args.port
 
     rosbridge_subscriber = RosbridgeSubscriber(rosbridge_ip, rosbridge_port)
 
