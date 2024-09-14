@@ -3,11 +3,12 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage, Imu
 from std_msgs.msg import Header, String
+from geometry_msgs.msg import PoseStamped
 import base64
 import argparse
 import numpy as np
 import time
-from geometry_msgs.msg import PoseStamped
+
 
 class RosbridgeSubscriber(Node):
     def __init__(self, rosbridge_ip, rosbridge_port):
@@ -19,6 +20,7 @@ class RosbridgeSubscriber(Node):
         self.publisher_color_compressed = self.create_publisher(CompressedImage, '/camera/color/image_raw/compressed', 10)
         self.publisher_imu = self.create_publisher(Imu, '/imu/data_raw', 10)
         self.publisher_tag_name = self.create_publisher(String, '/tag_name', 10)
+        self.publisher_goal_pose = self.create_publisher(PoseStamped, '/goal_pose', 10)  # Add goal_pose topic
 
         # Initial connection attempt
         self.connect_to_rosbridge()
@@ -59,8 +61,10 @@ class RosbridgeSubscriber(Node):
         self.listener_tag_name = roslibpy.Topic(self.client, '/tag_name', 'std_msgs/String')
         self.listener_tag_name.subscribe(self.callback_tag_name)
 
+        self.listener_goal_pose = roslibpy.Topic(self.client, '/goal_pose', 'geometry_msgs/PoseStamped')  # Add goal_pose subscriber
+        self.listener_goal_pose.subscribe(self.callback_goal_pose)
+
     def callback_depth_compressed(self, message):
-        # Convert roslibpy message to ROS 2 message for compressed depth image
         ros_msg = CompressedImage()
         ros_msg.header = Header()
         ros_msg.header.stamp = self.get_clock().now().to_msg()
@@ -75,7 +79,6 @@ class RosbridgeSubscriber(Node):
         self.publisher_depth_compressed.publish(ros_msg)
 
     def callback_color_compressed(self, message):
-        # Convert roslibpy message to ROS 2 message for compressed color image
         ros_msg = CompressedImage()
         ros_msg.header = Header()
         ros_msg.header.stamp = self.get_clock().now().to_msg()
@@ -90,7 +93,6 @@ class RosbridgeSubscriber(Node):
         self.publisher_color_compressed.publish(ros_msg)
 
     def callback_imu(self, message):
-        # Convert roslibpy message to ROS 2 message for IMU data
         ros_msg = Imu()
         ros_msg.header = Header()
         ros_msg.header.stamp = self.get_clock().now().to_msg()
@@ -112,10 +114,26 @@ class RosbridgeSubscriber(Node):
         self.publisher_imu.publish(ros_msg)
 
     def callback_tag_name(self, message):
-        # Convert roslibpy message to ROS 2 message for String
         ros_msg = String()
         ros_msg.data = message['data']
         self.publisher_tag_name.publish(ros_msg)
+
+    def callback_goal_pose(self, message):
+        ros_msg = PoseStamped()
+        ros_msg.header = Header()
+        ros_msg.header.stamp = self.get_clock().now().to_msg()
+        ros_msg.header.frame_id = message['header']['frame_id']
+
+        ros_msg.pose.position.x = message['pose']['position']['x']
+        ros_msg.pose.position.y = message['pose']['position']['y']
+        ros_msg.pose.position.z = message['pose']['position']['z']
+
+        ros_msg.pose.orientation.x = message['pose']['orientation']['x']
+        ros_msg.pose.orientation.y = message['pose']['orientation']['y']
+        ros_msg.pose.orientation.z = message['pose']['orientation']['z']
+        ros_msg.pose.orientation.w = message['pose']['orientation']['w']
+
+        self.publisher_goal_pose.publish(ros_msg)
 
     def destroy_node(self):
         if self.client.is_connected:
@@ -123,8 +141,10 @@ class RosbridgeSubscriber(Node):
             self.listener_color_compressed.unsubscribe()
             self.listener_imu.unsubscribe()
             self.listener_tag_name.unsubscribe()
+            self.listener_goal_pose.unsubscribe()  # Unsubscribe goal_pose listener
             self.client.terminate()
         super().destroy_node()
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -147,6 +167,7 @@ def main(args=None):
 
     rosbridge_subscriber.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
